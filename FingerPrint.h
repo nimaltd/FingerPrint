@@ -26,6 +26,7 @@ typedef struct
 	uint32_t	RxLastTime;
 	uint8_t		TouchIndex;
 	int16_t		LastDetectedLocation;
+	int16_t		Template;
 	
 	FingerPrintMode_t	FingerPrintMode;
 	uint8_t		Lock;
@@ -39,6 +40,10 @@ void			FingerPrint_Init(osPriority Priority);
 bool			Fingerprint_VerifyPassword(uint32_t pass);
 bool			Fingerprint_SaveNewFinger(uint16_t	Location,uint8_t	WaitForFingerInSecond);
 int16_t		FingerPrint_Scan(void);
+int16_t		FingerPrint_ReadTemplateNumber(void);
+bool			FingerPrint_DeleteAll(void);
+bool			FingerPrint_DeleteByLocation(uint16_t	Location);
+bool			FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond);
 
 
 //				in FingerPrintUser.c	Run Automaticaly after detect Saved Finger

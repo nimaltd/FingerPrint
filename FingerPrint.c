@@ -152,6 +152,8 @@ void	FingerPrint_Init(osPriority Priority)
   FingerPrintTaskHandle = osThreadCreate(osThread(NameFingerPrintTask), NULL);
 	osThreadDef(NameFingerPrintBufferTask, FingerPrintBufferTask, Priority, 0, 128);
   FingerPrintBufferHandle = osThreadCreate(osThread(NameFingerPrintBufferTask), NULL);
+	osDelay(200);
+	FingerPrint_ReadTemplateNumber();
 }
 //#########################################################################################################################
 bool	Fingerprint_VerifyPassword(uint32_t pass)
@@ -367,6 +369,7 @@ bool	Fingerprint_SaveNewFinger(uint16_t	Location,uint8_t	WaitForFingerInSecond)
 	
 	HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
 	FingerPrint.Lock=0;
+	FingerPrint_ReadTemplateNumber();
 	return true;
 	
 	Faild:
@@ -379,9 +382,12 @@ int16_t	FingerPrint_Scan(void)
 {
 	uint8_t Timeout;
 	if(FingerPrint.Lock==1)
-		return false;
+		return -1;
 	FingerPrint.Lock=1;
 	FingerPrint.GotAnswer=0;
+	uint8_t	IfModuleIsOff=0;
+	if(HAL_GPIO_ReadPin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN)==GPIO_PIN_RESET)
+			IfModuleIsOff=1;
 	//+++ take Image
 	memset(FingerPrint.TxBuffer,0,sizeof(FingerPrint.TxBuffer));
 	FingerPrint.TxBuffer[0]=FINGERPRINT_STARTCODE_BYTE0;
@@ -398,7 +404,11 @@ int16_t	FingerPrint_Scan(void)
 	FingerPrint.TxBuffer[11]=0x05;	
 	do
 	{
-			
+		if(IfModuleIsOff==1)
+		{
+			HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_SET);
+			osDelay(500);
+		}	
 		memset(FingerPrint.AnswerBuffer,0,sizeof(FingerPrint.AnswerBuffer));
 		HAL_UART_Transmit(&_FINGERPRINT_USART,FingerPrint.TxBuffer,12,100);
 		for(Timeout=0; Timeout<20 ; Timeout++)
@@ -457,6 +467,8 @@ int16_t	FingerPrint_Scan(void)
 			if((FingerPrint.AnswerBuffer[0]==0x00) && (FingerPrint.AnswerBuffer[1]==0x07) && (FingerPrint.AnswerBuffer[2]==0x00))
 			{
 				FingerPrint.Lock=0;
+				if(IfModuleIsOff==1)
+					HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
 				return FingerPrint.AnswerBuffer[3]*256+FingerPrint.AnswerBuffer[4];
 			}
 			if(Timeout>19)
@@ -466,9 +478,347 @@ int16_t	FingerPrint_Scan(void)
 	//---	Searching	
 	
 	Faild:
+	if(IfModuleIsOff==1)
+		HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
 	FingerPrint.Lock=0;
+	
 	return -1;
 	
 	
 }
 //#########################################################################################################################
+int16_t		FingerPrint_ReadTemplateNumber(void)
+{
+	uint8_t Timeout;
+	uint8_t	IfModuleIsOff=0;
+	if(FingerPrint.Lock==1)
+		return -1;
+	FingerPrint.Lock=1;
+	FingerPrint.GotAnswer=0;
+	//+++ Read Template
+	if(HAL_GPIO_ReadPin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN)==GPIO_PIN_RESET)
+		IfModuleIsOff=1;
+	if(IfModuleIsOff==1)
+	{
+		HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_SET);
+		osDelay(500);
+	}
+	memset(FingerPrint.TxBuffer,0,sizeof(FingerPrint.TxBuffer));
+	FingerPrint.TxBuffer[0]=FINGERPRINT_STARTCODE_BYTE0;
+	FingerPrint.TxBuffer[1]=FINGERPRINT_STARTCODE_BYTE1;
+	FingerPrint.TxBuffer[2]=0xFF;
+	FingerPrint.TxBuffer[3]=0xFF;
+	FingerPrint.TxBuffer[4]=0xFF;
+	FingerPrint.TxBuffer[5]=0xFF;
+	FingerPrint.TxBuffer[6]=FINGERPRINT_COMMANDPACKET;
+	FingerPrint.TxBuffer[7]=0x00;
+	FingerPrint.TxBuffer[8]=0x03;
+	FingerPrint.TxBuffer[9]=FINGERPRINT_TEMPLATECOUNT;
+	FingerPrint.TxBuffer[10]=0x00;
+	FingerPrint.TxBuffer[11]=0x21;	
+	do
+	{
+			
+		memset(FingerPrint.AnswerBuffer,0,sizeof(FingerPrint.AnswerBuffer));
+		HAL_UART_Transmit(&_FINGERPRINT_USART,FingerPrint.TxBuffer,12,100);
+		for(Timeout=0; Timeout<20 ; Timeout++)
+		{	
+			osDelay(100);
+			if((FingerPrint.AnswerBuffer[0]==0x00) && (FingerPrint.AnswerBuffer[1]==0x05) && (FingerPrint.AnswerBuffer[2]==0x00))
+			{
+				FingerPrint.Lock=0;
+				if(IfModuleIsOff==1)
+					HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
+				return FingerPrint.Template=(FingerPrint.AnswerBuffer[3]*256+FingerPrint.AnswerBuffer[4]);
+			}
+		}		
+		if(Timeout>19)
+			goto Faild;
+	}while(0);
+	//--- Read Template	
+	
+	Faild:
+	if(IfModuleIsOff==1)
+		HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
+	FingerPrint.Lock=0;
+	return -1;
+}
+//#########################################################################################################################
+//#########################################################################################################################
+bool		FingerPrint_DeleteAll(void)
+{
+	uint8_t Timeout;
+	uint8_t	IfModuleIsOff=0;
+	if(FingerPrint.Lock==1)
+		return -1;
+	FingerPrint.Lock=1;
+	FingerPrint.GotAnswer=0;
+	//+++ Delete All
+	if(HAL_GPIO_ReadPin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN)==GPIO_PIN_RESET)
+		IfModuleIsOff=1;
+	if(IfModuleIsOff==1)
+	{
+		HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_SET);
+		osDelay(500);
+	}
+	memset(FingerPrint.TxBuffer,0,sizeof(FingerPrint.TxBuffer));
+	FingerPrint.TxBuffer[0]=FINGERPRINT_STARTCODE_BYTE0;
+	FingerPrint.TxBuffer[1]=FINGERPRINT_STARTCODE_BYTE1;
+	FingerPrint.TxBuffer[2]=0xFF;
+	FingerPrint.TxBuffer[3]=0xFF;
+	FingerPrint.TxBuffer[4]=0xFF;
+	FingerPrint.TxBuffer[5]=0xFF;
+	FingerPrint.TxBuffer[6]=FINGERPRINT_COMMANDPACKET;
+	FingerPrint.TxBuffer[7]=0x00;
+	FingerPrint.TxBuffer[8]=0x03;
+	FingerPrint.TxBuffer[9]=FINGERPRINT_EMPTY;
+	FingerPrint.TxBuffer[10]=0x00;
+	FingerPrint.TxBuffer[11]=0x11;	
+	do
+	{
+			
+		memset(FingerPrint.AnswerBuffer,0,sizeof(FingerPrint.AnswerBuffer));
+		HAL_UART_Transmit(&_FINGERPRINT_USART,FingerPrint.TxBuffer,12,100);
+		for(Timeout=0; Timeout<20 ; Timeout++)
+		{	
+			osDelay(100);
+			if((FingerPrint.AnswerBuffer[0]==0x00) && (FingerPrint.AnswerBuffer[1]==0x03) && (FingerPrint.AnswerBuffer[2]==0x00) && (FingerPrint.AnswerBuffer[3]==0x00) && (FingerPrint.AnswerBuffer[4]==0x0A))
+			{
+				FingerPrint.Lock=0;
+				if(IfModuleIsOff==1)
+					HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
+				return true;
+			}
+		}		
+		if(Timeout>19)
+			goto Faild;
+	}while(0);
+	//--- Delete All	
+	
+	Faild:
+	if(IfModuleIsOff==1)
+		HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
+	FingerPrint.Lock=0;
+	return false;
+}
+//#########################################################################################################################
+bool		FingerPrint_DeleteByLocation(uint16_t	Location)
+{
+	uint8_t Timeout;
+	uint8_t	IfModuleIsOff=0;
+	if(FingerPrint.Lock==1)
+		return -1;
+	FingerPrint.Lock=1;
+	FingerPrint.GotAnswer=0;
+	//+++ Delete 
+	if(HAL_GPIO_ReadPin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN)==GPIO_PIN_RESET)
+		IfModuleIsOff=1;
+	if(IfModuleIsOff==1)
+	{
+		HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_SET);
+		osDelay(500);
+	}
+	memset(FingerPrint.TxBuffer,0,sizeof(FingerPrint.TxBuffer));
+	FingerPrint.TxBuffer[0]=FINGERPRINT_STARTCODE_BYTE0;
+	FingerPrint.TxBuffer[1]=FINGERPRINT_STARTCODE_BYTE1;
+	FingerPrint.TxBuffer[2]=0xFF;
+	FingerPrint.TxBuffer[3]=0xFF;
+	FingerPrint.TxBuffer[4]=0xFF;
+	FingerPrint.TxBuffer[5]=0xFF;
+	FingerPrint.TxBuffer[6]=FINGERPRINT_COMMANDPACKET;
+	FingerPrint.TxBuffer[7]=0x00;
+	FingerPrint.TxBuffer[8]=0x07;
+	FingerPrint.TxBuffer[9]=FINGERPRINT_DELETE;
+	FingerPrint.TxBuffer[10]=Location>>8;
+	FingerPrint.TxBuffer[11]=Location&0x00FF;	
+	FingerPrint.TxBuffer[12]=0x00;
+	FingerPrint.TxBuffer[13]=0x01;
+	uint16_t	Checksum=0;
+		for(uint8_t i=0;i<8; i++)
+			Checksum+=FingerPrint.TxBuffer[i+6];
+	FingerPrint.TxBuffer[14]=Checksum>>8;
+	FingerPrint.TxBuffer[15]=Checksum&0x00FF;
+	do
+	{
+			
+		memset(FingerPrint.AnswerBuffer,0,sizeof(FingerPrint.AnswerBuffer));
+		HAL_UART_Transmit(&_FINGERPRINT_USART,FingerPrint.TxBuffer,16,100);
+		for(Timeout=0; Timeout<20 ; Timeout++)
+		{	
+			osDelay(100);
+			if((FingerPrint.AnswerBuffer[0]==0x00) && (FingerPrint.AnswerBuffer[1]==0x03) && (FingerPrint.AnswerBuffer[2]==0x00) && (FingerPrint.AnswerBuffer[3]==0x00) && (FingerPrint.AnswerBuffer[4]==0x0A))
+			{
+				FingerPrint.Lock=0;
+				FingerPrint_ReadTemplateNumber();
+				if(IfModuleIsOff==1)
+					HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);				
+				return true;
+			}
+		}		
+		if(Timeout>19)
+			goto Faild;
+	}while(0);
+	//--- Delete 	
+	
+	Faild:
+	if(IfModuleIsOff==1)
+		HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
+	FingerPrint.Lock=0;
+	return false;
+}
+//#########################################################################################################################
+bool			FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond)
+{
+	uint8_t TimeOut;
+	uint8_t	IfModuleIsOff=0;
+	int16_t	Location=-1;
+	if(FingerPrint.Lock==1)
+		return false;
+	FingerPrint.Lock=1;
+	HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_SET);
+	osDelay(500);
+	//+++ take Image
+	memset(FingerPrint.TxBuffer,0,sizeof(FingerPrint.TxBuffer));
+	FingerPrint.TxBuffer[0]=FINGERPRINT_STARTCODE_BYTE0;
+	FingerPrint.TxBuffer[1]=FINGERPRINT_STARTCODE_BYTE1;
+	FingerPrint.TxBuffer[2]=0xFF;
+	FingerPrint.TxBuffer[3]=0xFF;
+	FingerPrint.TxBuffer[4]=0xFF;
+	FingerPrint.TxBuffer[5]=0xFF;
+	FingerPrint.TxBuffer[6]=FINGERPRINT_COMMANDPACKET;
+	FingerPrint.TxBuffer[7]=0x00;
+	FingerPrint.TxBuffer[8]=0x03;
+	FingerPrint.TxBuffer[9]=FINGERPRINT_GETIMAGE;
+	FingerPrint.TxBuffer[10]=0x00;
+	FingerPrint.TxBuffer[11]=0x05;	
+	TimeOut=0;
+	while(TimeOut < TimoutInSecond)
+	{
+		memset(FingerPrint.AnswerBuffer,0,sizeof(FingerPrint.AnswerBuffer));
+		HAL_UART_Transmit(&_FINGERPRINT_USART,FingerPrint.TxBuffer,12,100);
+		osDelay(1000);
+		if((FingerPrint.AnswerBuffer[0]==0x00) && (FingerPrint.AnswerBuffer[1]==0x03) && (FingerPrint.AnswerBuffer[2]==0x00) && (FingerPrint.AnswerBuffer[3]==0x00) && (FingerPrint.AnswerBuffer[4]==0x0A))
+			break;
+		TimeOut++;
+		if(TimeOut==TimoutInSecond)
+			goto Faild;
+	}
+	//--- take Image
+	//+++	put image to buffer 1
+	do
+	{
+		FingerPrint.TxBuffer[8]=0x04;
+		FingerPrint.TxBuffer[9]=FINGERPRINT_IMAGE2TZ;
+		FingerPrint.TxBuffer[10]=1;
+		FingerPrint.TxBuffer[11]=0x00;
+		FingerPrint.TxBuffer[12]=0x08;
+		memset(FingerPrint.AnswerBuffer,0,sizeof(FingerPrint.AnswerBuffer));	
+		HAL_UART_Transmit(&_FINGERPRINT_USART,FingerPrint.TxBuffer,13,100);
+		osDelay(1000);
+		if((FingerPrint.AnswerBuffer[0]==0x00) && (FingerPrint.AnswerBuffer[1]==0x03) && (FingerPrint.AnswerBuffer[2]==0x00) && (FingerPrint.AnswerBuffer[3]==0x00) && (FingerPrint.AnswerBuffer[4]==0x0A))
+			break;
+		else
+			goto Faild;
+	}while(0);
+	//---	put image to buffer 1	
+
+	//+++ Wait for put your finger up
+	TimeOut=0;
+	while(TimeOut < TimoutInSecond)
+	{
+		osDelay(1000);
+		TimeOut++;
+		if(TimeOut==TimoutInSecond)
+			goto Faild;
+		if( HAL_GPIO_ReadPin(_FINGERPRINT_IRQ_GPIO,_FINGERPRINT_IRQ_PIN)==GPIO_PIN_SET)
+			break;	
+	}	
+	//--- Wait for put your finger up
+	
+	//+++	Searching
+	do
+	{
+		FingerPrint.TxBuffer[8]=0x08;
+		FingerPrint.TxBuffer[9]=FINGERPRINT_SEARCH;
+		FingerPrint.TxBuffer[10]=1;
+		FingerPrint.TxBuffer[11]=0x00;
+		FingerPrint.TxBuffer[12]=0x00;
+		FingerPrint.TxBuffer[13]=0x01;
+		FingerPrint.TxBuffer[14]=0xF4;
+		uint16_t	Checksum=0;
+		for(uint8_t i=0;i<11; i++)
+			Checksum+=FingerPrint.TxBuffer[i+6];
+		FingerPrint.TxBuffer[15]=Checksum>>8;
+		FingerPrint.TxBuffer[16]=Checksum&0x00FF;
+		
+		memset(FingerPrint.AnswerBuffer,0,sizeof(FingerPrint.AnswerBuffer));	
+		HAL_UART_Transmit(&_FINGERPRINT_USART,FingerPrint.TxBuffer,17,100);
+		for(TimeOut=0; TimeOut<20 ; TimeOut++)
+		{
+			osDelay(100);
+			if((FingerPrint.AnswerBuffer[0]==0x00) && (FingerPrint.AnswerBuffer[1]==0x07) && (FingerPrint.AnswerBuffer[2]==0x00))
+			{
+				FingerPrint.Lock=0;
+				if(IfModuleIsOff==1)
+					HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
+				Location =  FingerPrint.AnswerBuffer[3]*256+FingerPrint.AnswerBuffer[4];
+				break;
+			}
+			if(TimeOut>19)
+				goto Faild;
+		}
+	}while(0);
+	//---	Searching	
+	
+	//+++ Delete 
+	memset(FingerPrint.TxBuffer,0,sizeof(FingerPrint.TxBuffer));
+	FingerPrint.TxBuffer[0]=FINGERPRINT_STARTCODE_BYTE0;
+	FingerPrint.TxBuffer[1]=FINGERPRINT_STARTCODE_BYTE1;
+	FingerPrint.TxBuffer[2]=0xFF;
+	FingerPrint.TxBuffer[3]=0xFF;
+	FingerPrint.TxBuffer[4]=0xFF;
+	FingerPrint.TxBuffer[5]=0xFF;
+	FingerPrint.TxBuffer[6]=FINGERPRINT_COMMANDPACKET;
+	FingerPrint.TxBuffer[7]=0x00;
+	FingerPrint.TxBuffer[8]=0x07;
+	FingerPrint.TxBuffer[9]=FINGERPRINT_DELETE;
+	FingerPrint.TxBuffer[10]=Location>>8;
+	FingerPrint.TxBuffer[11]=Location&0x00FF;	
+	FingerPrint.TxBuffer[12]=0x00;
+	FingerPrint.TxBuffer[13]=0x01;
+	uint16_t	Checksum=0;
+		for(uint8_t i=0;i<8; i++)
+			Checksum+=FingerPrint.TxBuffer[i+6];
+	FingerPrint.TxBuffer[14]=Checksum>>8;
+	FingerPrint.TxBuffer[15]=Checksum&0x00FF;
+	do
+	{
+			
+		memset(FingerPrint.AnswerBuffer,0,sizeof(FingerPrint.AnswerBuffer));
+		HAL_UART_Transmit(&_FINGERPRINT_USART,FingerPrint.TxBuffer,16,100);
+		for(TimeOut=0; TimeOut<20 ; TimeOut++)
+		{	
+			osDelay(100);
+			if((FingerPrint.AnswerBuffer[0]==0x00) && (FingerPrint.AnswerBuffer[1]==0x03) && (FingerPrint.AnswerBuffer[2]==0x00) && (FingerPrint.AnswerBuffer[3]==0x00) && (FingerPrint.AnswerBuffer[4]==0x0A))
+			{
+				FingerPrint.Lock=0;
+				FingerPrint_ReadTemplateNumber();
+				if(IfModuleIsOff==1)
+					HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);				
+				return true;
+			}
+		}		
+		if(TimeOut>19)
+			goto Faild;
+	}while(0);
+	//--- Delete 	
+	
+	Faild:
+	if(IfModuleIsOff==1)
+		HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
+	FingerPrint.Lock=0;
+	return false;
+	
+}
+//#########################################################################################################################
+
