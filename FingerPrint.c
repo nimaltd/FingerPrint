@@ -75,7 +75,6 @@ void	FingerPrint_RxCallback(void)
 //#########################################################################################################################
 void FingerPrintTask(void const * argument)
 {
-	FingerPrint.FingerPrintMode = FingerPrintMode_Scan;
 	FingerPrint.TouchIndex = 0;
 	memset(FingerPrint.RxBuffer,0,sizeof(FingerPrint.RxBuffer));
 	memset(FingerPrint.TxBuffer,0,sizeof(FingerPrint.TxBuffer));
@@ -102,20 +101,13 @@ void FingerPrintTask(void const * argument)
 		//+++	Finger pressed and do job	
 		if(FingerPrint.TouchIndex==5)
 		{
-			switch(FingerPrint.FingerPrintMode)
-			{
-				case FingerPrintMode_Scan:
-					FingerPrint.LastDetectedLocation = FingerPrint_Scan();
-					if(FingerPrint.LastDetectedLocation >= 0)
-						FingerPrint_Detect(FingerPrint.LastDetectedLocation);				
-					while(HAL_GPIO_ReadPin(_FINGERPRINT_IRQ_GPIO,_FINGERPRINT_IRQ_PIN)==GPIO_PIN_RESET)
-						osDelay(500);
-					osDelay(500);
-				break;
-				case FingerPrintMode_Delete:
-					
-				break;
-			}				
+			
+			FingerPrint.LastDetectedLocation = FingerPrint_Scan();
+			if(FingerPrint.LastDetectedLocation >= 0)
+				FingerPrint_Detect(FingerPrint.LastDetectedLocation);				
+			while(HAL_GPIO_ReadPin(_FINGERPRINT_IRQ_GPIO,_FINGERPRINT_IRQ_PIN)==GPIO_PIN_RESET)
+				osDelay(500);
+			osDelay(500);				
 		}
 		//---	Finger pressed and do job
 		osDelay(100);
@@ -672,6 +664,7 @@ bool			FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond)
 	uint8_t TimeOut;
 	uint8_t	IfModuleIsOff=0;
 	int16_t	Location=-1;
+	uint16_t	Checksum=0;
 	if(FingerPrint.Lock==1)
 		return false;
 	FingerPrint.Lock=1;
@@ -745,7 +738,6 @@ bool			FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond)
 		FingerPrint.TxBuffer[12]=0x00;
 		FingerPrint.TxBuffer[13]=0x01;
 		FingerPrint.TxBuffer[14]=0xF4;
-		uint16_t	Checksum=0;
 		for(uint8_t i=0;i<11; i++)
 			Checksum+=FingerPrint.TxBuffer[i+6];
 		FingerPrint.TxBuffer[15]=Checksum>>8;
@@ -786,7 +778,7 @@ bool			FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond)
 	FingerPrint.TxBuffer[11]=Location&0x00FF;	
 	FingerPrint.TxBuffer[12]=0x00;
 	FingerPrint.TxBuffer[13]=0x01;
-	uint16_t	Checksum=0;
+	Checksum=0;
 		for(uint8_t i=0;i<8; i++)
 			Checksum+=FingerPrint.TxBuffer[i+6];
 	FingerPrint.TxBuffer[14]=Checksum>>8;

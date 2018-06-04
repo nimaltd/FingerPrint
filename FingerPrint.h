@@ -6,14 +6,6 @@
 #include <stdbool.h>
 //#########################################################################################################################
 
-typedef enum
-{
-	FingerPrintMode_Scan=0,
-	FingerPrintMode_Delete,	
-	
-}FingerPrintMode_t;
-
-
 
 typedef struct
 {
@@ -28,7 +20,6 @@ typedef struct
 	int16_t		LastDetectedLocation;
 	int16_t		Template;
 	
-	FingerPrintMode_t	FingerPrintMode;
 	uint8_t		Lock;
 	
 }FingerPrint_t;
