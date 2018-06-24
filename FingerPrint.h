@@ -34,7 +34,7 @@ int16_t		FingerPrint_Scan(void);
 int16_t		FingerPrint_ReadTemplateNumber(void);
 bool			FingerPrint_DeleteAll(void);
 bool			FingerPrint_DeleteByLocation(uint16_t	Location);
-bool			FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond);
+int16_t		FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond);
 
 
 //				in FingerPrintUser.c	Run Automaticaly after detect Saved Finger

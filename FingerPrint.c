@@ -576,6 +576,7 @@ bool		FingerPrint_DeleteAll(void)
 			osDelay(100);
 			if((FingerPrint.AnswerBuffer[0]==0x00) && (FingerPrint.AnswerBuffer[1]==0x03) && (FingerPrint.AnswerBuffer[2]==0x00) && (FingerPrint.AnswerBuffer[3]==0x00) && (FingerPrint.AnswerBuffer[4]==0x0A))
 			{
+				FingerPrint.Template=0;
 				FingerPrint.Lock=0;
 				if(IfModuleIsOff==1)
 					HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
@@ -659,7 +660,7 @@ bool		FingerPrint_DeleteByLocation(uint16_t	Location)
 	return false;
 }
 //#########################################################################################################################
-bool			FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond)
+int16_t		FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond)
 {
 	uint8_t TimeOut;
 	uint8_t	IfModuleIsOff=0;
@@ -797,7 +798,7 @@ bool			FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond)
 				FingerPrint_ReadTemplateNumber();
 				if(IfModuleIsOff==1)
 					HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);				
-				return true;
+				return Location;
 			}
 		}		
 		if(TimeOut>19)
@@ -809,7 +810,7 @@ bool			FingerPrint_DeleteByFinger(uint8_t	TimoutInSecond)
 	if(IfModuleIsOff==1)
 		HAL_GPIO_WritePin(_FINGERPRINT_POWER_GPIO,_FINGERPRINT_POWER_PIN,GPIO_PIN_RESET);
 	FingerPrint.Lock=0;
-	return false;
+	return -1;
 	
 }
 //#########################################################################################################################
